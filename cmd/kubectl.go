@@ -37,6 +37,8 @@ func runKubectl(ctx *cli.Context) error {
 		return err
 	}
 
+	// c.ManagementClient.Token.ByID()
+	// kubeconfigFilename := fmt.Sprintf("%s-%s-kubeconfig", c.)
 	cluster, err := getClusterByID(c, c.UserConfig.FocusedCluster())
 	if err != nil {
 		return err
