@@ -51,7 +51,7 @@ type LoginInput struct {
 }
 
 const (
-	kubeConfigCache = "/.cache/token"
+	tokenCache      = "/.cache/token"
 	cachedFileExt   = ".json"
 	authProviderURL = "%s/v3-public/authProviders"
 	authTokenURL    = "%s/v3-public/authTokens/%s"
@@ -179,7 +179,7 @@ func deleteCachedCredential(ctx *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	cacheDir := filepath.Join(dir, kubeConfigCache)
+	cacheDir := filepath.Join(dir, tokenCache)
 	if ctx.Args().First() == "all" {
 		customPrint(fmt.Sprintf("removing cached tokens [%s]", cacheDir))
 		return os.RemoveAll(cacheDir)
@@ -200,7 +200,7 @@ func loadCachedCredential(key string) (*ExecCredential, error) {
 	if err != nil {
 		return nil, err
 	}
-	cachePath := filepath.Join(dir, kubeConfigCache, fmt.Sprintf("%s%s", key, cachedFileExt))
+	cachePath := filepath.Join(dir, tokenCache, fmt.Sprintf("%s%s", key, cachedFileExt))
 	f, err := os.Open(cachePath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -231,7 +231,7 @@ func cacheCredential(cred *ExecCredential, id string) error {
 	if err != nil {
 		return err
 	}
-	cachePathDir := filepath.Join(dir, kubeConfigCache)
+	cachePathDir := filepath.Join(dir, tokenCache)
 	if err := os.MkdirAll(cachePathDir, os.FileMode(0700)); err != nil {
 		return err
 	}

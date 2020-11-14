@@ -139,6 +139,17 @@ func listRoleTemplateBindings(ctx *cli.Context, b []RoleTemplateBinding) error {
 	return writer.Err()
 }
 
+// serverCurrent command to display the name of the current server in the local config
+func getCurrentServer(ctx *cli.Context) (string, string, error) {
+	cf, err := loadConfig(ctx)
+	if err != nil {
+		return "", "", err
+	}
+
+	serverName := cf.CurrentServer
+	return cf.CurrentServer, cf.Servers[serverName].URL, nil
+}
+
 func usersToNameMapping(u []managementClient.User) map[string]string {
 	userMapping := make(map[string]string)
 	for _, user := range u {

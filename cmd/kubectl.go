@@ -2,11 +2,24 @@ package cmd
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/urfave/cli"
+	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/tools/clientcmd/api"
+
+	"github.com/rancher/norman/clientbase"
+	client "github.com/rancher/types/client/management/v3"
+)
+
+const (
+	kubeConfigNameFormat = "%s-%s-kubeconfig"
+)
+
+var (
+	kubeConfigPath = os.ExpandEnv("${HOME}/.rancher/.cache/.kubeconfig")
 )
 
 func KubectlCommand() cli.Command {
@@ -37,34 +50,63 @@ func runKubectl(ctx *cli.Context) error {
 		return err
 	}
 
-	cluster, err := getClusterByID(c, c.UserConfig.FocusedCluster())
+	config, err := loadConfig(ctx)
 	if err != nil {
 		return err
 	}
 
-	config, err := c.ManagementClient.Cluster.ActionGenerateKubeconfig(cluster)
+	currentRancherServer := config.FocusedServer()
+	if currentRancherServer == nil {
+		return fmt.Errorf("no focused server")
+	}
+
+	currentToken := currentRancherServer.AccessKey
+	t, err := c.ManagementClient.Token.ByID(currentToken)
 	if err != nil {
 		return err
 	}
 
-	tmpfile, err := ioutil.TempFile("", "rancher-")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmpfile.Name())
+	currentUser := t.UserID
+	currentCluster := currentRancherServer.FocusedCluster()
+	filename := fmt.Sprintf(kubeConfigNameFormat, currentUser, currentCluster)
+	kubeconfigFilePath := strings.Join([]string{kubeConfigPath, filename}, "/")
 
-	_, err = tmpfile.Write([]byte(config.Config))
+	kubeconfig, err := clientcmd.LoadFromFile(kubeconfigFilePath)
 	if err != nil {
-		return err
+		if !os.IsNotExist(err) {
+			return err
+		}
 	}
 
-	err = tmpfile.Close()
-	if err != nil {
-		return err
+	var isTokenValid bool
+	if kubeconfig != nil {
+		tokenID, err := extractKubeconfigTokenID(*kubeconfig)
+		if err != nil {
+			return err
+		}
+		isTokenValid, err = validateToken(tokenID, c.ManagementClient.Token)
+		if err != nil {
+			return err
+		}
+	}
+
+	if kubeconfig == nil || !isTokenValid {
+		cluster, err := getClusterByID(c, c.UserConfig.FocusedCluster())
+		if err != nil {
+			return err
+		}
+
+		config, err := c.ManagementClient.Cluster.ActionGenerateKubeconfig(cluster)
+		if err != nil {
+			return err
+		}
+		if err := writeKubeconfig(kubeconfigFilePath, []byte(config.Config)); err != nil {
+			return err
+		}
 	}
 
 	cmd := exec.Command(path, ctx.Args()...)
-	cmd.Env = append(os.Environ(), "KUBECONFIG="+tmpfile.Name())
+	cmd.Env = append(os.Environ(), "KUBECONFIG="+kubeconfigFilePath)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
@@ -73,4 +115,38 @@ func runKubectl(ctx *cli.Context) error {
 		return err
 	}
 	return nil
+}
+
+func writeKubeconfig(filePath string, kubeconfig []byte) error {
+	config, err := clientcmd.Load(kubeconfig)
+	if err != nil {
+		return err
+	}
+	return clientcmd.WriteToFile(*config, filePath)
+}
+
+func extractKubeconfigTokenID(kubeconfig api.Config) (string, error) {
+	if len(kubeconfig.AuthInfos) != 1 {
+		return "", fmt.Errorf("invalid kubeconfig, expected to contain exactly 1 user")
+	}
+	var parts []string
+	for _, val := range kubeconfig.AuthInfos {
+		parts = strings.Split(val.Token, ":")
+		if len(parts) != 2 {
+			return "", fmt.Errorf("failed to parse kubeconfig token")
+		}
+	}
+
+	return parts[0], nil
+}
+
+func validateToken(tokenID string, tokenClient client.TokenOperations) (bool, error) {
+	token, err := tokenClient.ByID(tokenID)
+	if err != nil {
+		if !clientbase.IsNotFound(err) {
+			return false, err
+		}
+		return false, nil
+	}
+	return !token.Expired, nil
 }

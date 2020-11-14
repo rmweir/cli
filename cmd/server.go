@@ -32,7 +32,7 @@ func ServerCommand() cli.Command {
 			{
 				Name:   "current",
 				Usage:  "Display the current server",
-				Action: serverCurrent,
+				Action: printCurrentServer,
 			},
 			{
 				Name:      "delete",
@@ -64,15 +64,13 @@ be displayed and one can be selected.
 }
 
 // serverCurrent command to display the name of the current server in the local config
-func serverCurrent(ctx *cli.Context) error {
-	cf, err := loadConfig(ctx)
+func printCurrentServer(ctx *cli.Context) error {
+	serverName, url, err := getCurrentServer(ctx)
 	if err != nil {
 		return err
 	}
 
-	serverName := cf.CurrentServer
-	URL := cf.Servers[serverName].URL
-	fmt.Printf("Name: %s URL: %s\n", serverName, URL)
+	fmt.Printf("Name: %s URL: %s\n", serverName, url)
 	return nil
 }
 
