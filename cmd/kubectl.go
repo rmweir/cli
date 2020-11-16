@@ -138,8 +138,11 @@ func writeKubeconfig(filePath string, kubeconfig []byte) error {
 	logrus.Infof("Saving config to %s", filePath)
 
 	if err := os.Remove(filePath); err != nil {
-		return err
+		if !os.IsNotExist(err) {
+			return err
+		}
 	}
+
 	output, err := os.Create(filePath)
 	if err != nil {
 		return err
@@ -160,8 +163,6 @@ func extractKubeconfigTokenID(kubeconfig []byte) (string, error) {
 	}
 
 	currentKubeconfigToken := &Token{}
-	a := string(kubeconfig)
-	fmt.Println(a)
 	err := yaml.Unmarshal(kubeconfig, currentKubeconfigToken)
 	if err != nil {
 		return "", err
